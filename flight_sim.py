@@ -21,7 +21,7 @@ class SimplePlane:
     def update(self, pitch_input):
         # Simple physics
         gravity = 0.3
-        pitch_force = pitch_input * 0.5
+        pitch_force = pitch_input * 1.0
 
         self.velocity += pitch_force - gravity
         self.velocity *= 0.9  # Air resistance
