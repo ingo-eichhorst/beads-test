@@ -19,8 +19,16 @@ class SimplePlane:
         self.altitude = screen_height // 2  # Middle of screen
         self.velocity = 0.0  # Vertical velocity
         self.screen_height = screen_height
+        self.fuel = 100.0  # Start with full tank
+        self.max_fuel = 100.0
+        self.fuel_depletion_rate = 0.05  # Fuel consumed per frame
 
     def update(self, pitch_input):
+        # Consume fuel
+        self.fuel -= self.fuel_depletion_rate
+        if self.fuel < 0:
+            self.fuel = 0
+
         # Simple physics
         gravity = 0.3
         pitch_force = pitch_input * 1.0
@@ -37,6 +45,14 @@ class SimplePlane:
         if self.altitude > self.screen_height - 3:
             self.altitude = self.screen_height - 3
             self.velocity = 0
+
+    def add_fuel(self, amount):
+        """Add fuel, capped at max capacity."""
+        self.fuel = min(self.fuel + amount, self.max_fuel)
+
+    def is_out_of_fuel(self):
+        """Check if plane has run out of fuel."""
+        return self.fuel <= 0
 
 
 class SimpleGround:
@@ -112,12 +128,20 @@ class ScoreManager:
 
 
 class Collectible:
-    def __init__(self, x, y, value=50):
+    def __init__(self, x, y, item_type='star'):
         self.x = x
         self.y = y
-        self.value = value
-        self.char = '*'
+        self.item_type = item_type
         self.active = True
+
+        if item_type == 'star':
+            self.char = '*'
+            self.value = 50
+            self.fuel = 0
+        elif item_type == 'fuel':
+            self.char = 'F'
+            self.value = 25
+            self.fuel = 30.0
 
     def scroll(self):
         """Move collectible left as terrain scrolls."""
@@ -155,17 +179,20 @@ class CollectibleManager:
         # Spawn at right edge of screen, random altitude (avoid ground and ceiling)
         y = random.randint(5, self.height - 10)
         x = self.width - 1
-        self.collectibles.append(Collectible(x, y))
+
+        # 70% chance for star, 30% chance for fuel
+        item_type = 'star' if random.random() < 0.7 else 'fuel'
+        self.collectibles.append(Collectible(x, y, item_type))
 
     def check_collision(self, plane_x, plane_y):
-        """Check if plane collided with any collectibles."""
+        """Check if plane collided with any collectibles. Returns (points, fuel)."""
         for item in self.collectibles:
             if item.active:
                 # Check if plane position overlaps with collectible
                 if abs(item.x - plane_x) <= 2 and abs(item.y - plane_y) <= 1:
                     item.active = False
-                    return item.value
-        return 0
+                    return (item.value, item.fuel)
+        return (0, 0)
 
     def draw(self, stdscr):
         """Draw all active collectibles."""
@@ -192,6 +219,7 @@ def main(stdscr):
     pitch = 0
     frame = 0
     crashed = False
+    crash_reason = ""
     last_collect_frame = -10  # For visual feedback
 
     while True:
@@ -222,14 +250,24 @@ def main(stdscr):
             ground_top_y = height - ground_height
 
             # Check collectible collision
-            points = collectible_manager.check_collision(plane_x, plane_y)
-            if points > 0:
-                score_manager.add_collectible(points)
+            points, fuel = collectible_manager.check_collision(plane_x, plane_y)
+            if points > 0 or fuel > 0:
+                if points > 0:
+                    score_manager.add_collectible(points)
+                if fuel > 0:
+                    plane.add_fuel(fuel)
                 last_collect_frame = frame
 
             # Check if plane hits ground
             if plane_y >= ground_top_y - 1:
                 crashed = True
+                crash_reason = "ground"
+                score_manager.check_high_score()
+
+            # Check if plane runs out of fuel
+            if plane.is_out_of_fuel():
+                crashed = True
+                crash_reason = "fuel"
                 score_manager.check_high_score()
 
         # Draw
@@ -267,6 +305,16 @@ def main(stdscr):
             stdscr.addstr(5, 2, f"Stars:    {score_manager.collectibles:3d}")
             stdscr.addstr(6, 2, f"Score:    {score_manager.get_score():5d}")
             stdscr.addstr(7, 2, f"High:     {score_manager.high_score:5d}")
+
+            # Fuel gauge with visual bar
+            fuel_percent = int((plane.fuel / plane.max_fuel) * 10)
+            fuel_bar = '█' * fuel_percent + '░' * (10 - fuel_percent)
+            fuel_text = f"Fuel: {fuel_bar} {plane.fuel:5.1f}%"
+            if plane.fuel < 20:
+                stdscr.addstr(8, 2, fuel_text, curses.A_BOLD | curses.A_BLINK)
+            else:
+                stdscr.addstr(8, 2, fuel_text)
+
             stdscr.addstr(height - 2, 2, "W=Up S=Down Q=Quit")
 
             # Collection feedback
@@ -279,7 +327,10 @@ def main(stdscr):
 
             # Crash message
             if crashed:
-                crash_msg = "*** CRASHED! Press Q to quit ***"
+                if crash_reason == "fuel":
+                    crash_msg = "*** OUT OF FUEL! Press Q to quit ***"
+                else:
+                    crash_msg = "*** CRASHED! Press Q to quit ***"
                 crash_x = (width - len(crash_msg)) // 2
                 crash_y = height // 2
                 stdscr.addstr(crash_y, crash_x, crash_msg, curses.A_BOLD | curses.A_BLINK)
