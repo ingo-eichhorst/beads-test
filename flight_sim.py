@@ -60,6 +60,11 @@ class SimpleGround:
         self.width = width
         self.heights = [random.randint(3, 8) for _ in range(width)]
         self.offset = 0
+        self.difficulty = 1
+
+    def set_difficulty(self, difficulty):
+        """Update terrain generation difficulty."""
+        self.difficulty = difficulty
 
     def scroll(self):
         self.offset += 1
@@ -67,12 +72,32 @@ class SimpleGround:
             self.offset = 0
             # Add new column, remove old
             self.heights.pop(0)
-            self.heights.append(random.randint(3, 8))
+            # Terrain variation increases with difficulty
+            min_height = max(3, 8 - self.difficulty)
+            max_height = min(15, 8 + self.difficulty)
+            self.heights.append(random.randint(min_height, max_height))
 
     def get_height(self, x):
         if 0 <= x < len(self.heights):
             return self.heights[x]
         return 5
+
+
+class DifficultyManager:
+    def __init__(self):
+        self.level = 1
+        self.frame_count = 0
+        self.level_up_interval = 500  # Frames per difficulty increase
+
+    def update(self, frame_count):
+        """Update difficulty based on frame count."""
+        self.frame_count = frame_count
+        self.level = 1 + (frame_count // self.level_up_interval)
+
+    def get_scroll_frequency(self):
+        """Calculate how often terrain should scroll (lower = faster)."""
+        # Start at every 2 frames, decrease to 1 at high difficulty
+        return max(1, 3 - (self.level // 3))
 
 
 class ScoreManager:
@@ -215,6 +240,7 @@ def main(stdscr):
     ground = SimpleGround(width)
     score_manager = ScoreManager()
     collectible_manager = CollectibleManager(width, height)
+    difficulty_manager = DifficultyManager()
 
     pitch = 0
     frame = 0
@@ -237,8 +263,11 @@ def main(stdscr):
         # Update
         if not crashed:
             plane.update(pitch)
-            if frame % 2 == 0:  # Scroll slower
+            difficulty_manager.update(frame)
+            scroll_freq = difficulty_manager.get_scroll_frequency()
+            if frame % scroll_freq == 0:  # Dynamic scroll speed
                 ground.scroll()
+            ground.set_difficulty(difficulty_manager.level)
             score_manager.update(frame)
             collectible_manager.update(frame)
 
@@ -314,6 +343,9 @@ def main(stdscr):
                 stdscr.addstr(8, 2, fuel_text, curses.A_BOLD | curses.A_BLINK)
             else:
                 stdscr.addstr(8, 2, fuel_text)
+
+            # Difficulty level
+            stdscr.addstr(9, 2, f"Level:    {difficulty_manager.level:2d}")
 
             stdscr.addstr(height - 2, 2, "W=Up S=Down Q=Quit")
 
