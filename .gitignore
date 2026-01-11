@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Flight Simulator
+.flight_sim_highscore.json
+
+# bv (beads viewer) local config and caches
+.bv/

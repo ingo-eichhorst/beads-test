@@ -10,6 +10,8 @@ Controls:
 import curses
 import time
 import random
+import os
+import json
 
 
 class SimplePlane:
@@ -57,6 +59,51 @@ class SimpleGround:
         return 5
 
 
+class ScoreManager:
+    def __init__(self, score_file='.flight_sim_highscore.json'):
+        self.score_file = score_file
+        self.distance = 0
+        self.time_survived = 0.0
+        self.high_score = self.load_high_score()
+
+    def load_high_score(self):
+        """Load high score from file."""
+        if os.path.exists(self.score_file):
+            try:
+                with open(self.score_file, 'r') as f:
+                    data = json.load(f)
+                    return data.get('high_score', 0)
+            except:
+                return 0
+        return 0
+
+    def save_high_score(self):
+        """Save high score to file."""
+        try:
+            with open(self.score_file, 'w') as f:
+                json.dump({'high_score': self.high_score}, f)
+        except:
+            pass
+
+    def update(self, frame_count):
+        """Update distance and time based on frame count."""
+        self.distance = frame_count // 2  # Each scroll increment
+        self.time_survived = frame_count * 0.05  # 50ms per frame
+
+    def get_score(self):
+        """Calculate total score."""
+        return int(self.distance + self.time_survived * 10)
+
+    def check_high_score(self):
+        """Check if current score is a new high score."""
+        current_score = self.get_score()
+        if current_score > self.high_score:
+            self.high_score = current_score
+            self.save_high_score()
+            return True
+        return False
+
+
 def main(stdscr):
     curses.curs_set(0)  # Hide cursor
     stdscr.nodelay(1)   # Non-blocking input
@@ -66,6 +113,7 @@ def main(stdscr):
 
     plane = SimplePlane(height)
     ground = SimpleGround(width)
+    score_manager = ScoreManager()
 
     pitch = 0
     frame = 0
@@ -88,6 +136,7 @@ def main(stdscr):
             plane.update(pitch)
             if frame % 2 == 0:  # Scroll slower
                 ground.scroll()
+            score_manager.update(frame)
 
         # Collision detection
         if not crashed:
@@ -99,6 +148,7 @@ def main(stdscr):
             # Check if plane hits ground
             if plane_y >= ground_top_y - 1:
                 crashed = True
+                score_manager.check_high_score()
 
         # Draw
         stdscr.clear()
@@ -127,6 +177,10 @@ def main(stdscr):
         try:
             stdscr.addstr(1, 2, f"Altitude: {int(height - plane.altitude):3d}")
             stdscr.addstr(2, 2, f"Velocity: {plane.velocity:5.1f}")
+            stdscr.addstr(3, 2, f"Distance: {score_manager.distance:4d}")
+            stdscr.addstr(4, 2, f"Time:     {score_manager.time_survived:5.1f}s")
+            stdscr.addstr(5, 2, f"Score:    {score_manager.get_score():5d}")
+            stdscr.addstr(6, 2, f"High:     {score_manager.high_score:5d}")
             stdscr.addstr(height - 2, 2, "W=Up S=Down Q=Quit")
 
             # Crash message
@@ -135,6 +189,13 @@ def main(stdscr):
                 crash_x = (width - len(crash_msg)) // 2
                 crash_y = height // 2
                 stdscr.addstr(crash_y, crash_x, crash_msg, curses.A_BOLD | curses.A_BLINK)
+
+                # Show final score
+                final_score_msg = f"Final Score: {score_manager.get_score()}"
+                if score_manager.get_score() >= score_manager.high_score:
+                    final_score_msg += " - NEW HIGH SCORE!"
+                final_x = (width - len(final_score_msg)) // 2
+                stdscr.addstr(crash_y + 1, final_x, final_score_msg, curses.A_BOLD)
         except:
             pass
 
