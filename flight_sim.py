@@ -65,6 +65,8 @@ class ScoreManager:
         self.distance = 0
         self.time_survived = 0.0
         self.high_score = self.load_high_score()
+        self.collectibles = 0
+        self.bonus_points = 0
 
     def load_high_score(self):
         """Load high score from file."""
@@ -90,9 +92,14 @@ class ScoreManager:
         self.distance = frame_count // 2  # Each scroll increment
         self.time_survived = frame_count * 0.05  # 50ms per frame
 
+    def add_collectible(self, points=50):
+        """Add points for collecting an item."""
+        self.collectibles += 1
+        self.bonus_points += points
+
     def get_score(self):
         """Calculate total score."""
-        return int(self.distance + self.time_survived * 10)
+        return int(self.distance + self.time_survived * 10 + self.bonus_points)
 
     def check_high_score(self):
         """Check if current score is a new high score."""
@@ -102,6 +109,72 @@ class ScoreManager:
             self.save_high_score()
             return True
         return False
+
+
+class Collectible:
+    def __init__(self, x, y, value=50):
+        self.x = x
+        self.y = y
+        self.value = value
+        self.char = '*'
+        self.active = True
+
+    def scroll(self):
+        """Move collectible left as terrain scrolls."""
+        self.x -= 1
+
+    def is_off_screen(self):
+        """Check if collectible has scrolled off screen."""
+        return self.x < 0
+
+
+class CollectibleManager:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.collectibles = []
+        self.spawn_interval = 100  # Frames between spawns
+        self.last_spawn = 0
+
+    def update(self, frame_count):
+        """Update all collectibles and spawn new ones."""
+        # Scroll existing collectibles
+        for item in self.collectibles:
+            item.scroll()
+
+        # Remove off-screen collectibles
+        self.collectibles = [item for item in self.collectibles if not item.is_off_screen() and item.active]
+
+        # Spawn new collectibles
+        if frame_count - self.last_spawn >= self.spawn_interval:
+            self.spawn()
+            self.last_spawn = frame_count
+
+    def spawn(self):
+        """Spawn a new collectible at random altitude."""
+        # Spawn at right edge of screen, random altitude (avoid ground and ceiling)
+        y = random.randint(5, self.height - 10)
+        x = self.width - 1
+        self.collectibles.append(Collectible(x, y))
+
+    def check_collision(self, plane_x, plane_y):
+        """Check if plane collided with any collectibles."""
+        for item in self.collectibles:
+            if item.active:
+                # Check if plane position overlaps with collectible
+                if abs(item.x - plane_x) <= 2 and abs(item.y - plane_y) <= 1:
+                    item.active = False
+                    return item.value
+        return 0
+
+    def draw(self, stdscr):
+        """Draw all active collectibles."""
+        for item in self.collectibles:
+            if item.active:
+                try:
+                    stdscr.addstr(int(item.y), int(item.x), item.char, curses.A_BOLD)
+                except:
+                    pass
 
 
 def main(stdscr):
@@ -114,10 +187,12 @@ def main(stdscr):
     plane = SimplePlane(height)
     ground = SimpleGround(width)
     score_manager = ScoreManager()
+    collectible_manager = CollectibleManager(width, height)
 
     pitch = 0
     frame = 0
     crashed = False
+    last_collect_frame = -10  # For visual feedback
 
     while True:
         # Input
@@ -137,6 +212,7 @@ def main(stdscr):
             if frame % 2 == 0:  # Scroll slower
                 ground.scroll()
             score_manager.update(frame)
+            collectible_manager.update(frame)
 
         # Collision detection
         if not crashed:
@@ -144,6 +220,12 @@ def main(stdscr):
             plane_y = int(plane.altitude)
             ground_height = ground.get_height(plane_x)
             ground_top_y = height - ground_height
+
+            # Check collectible collision
+            points = collectible_manager.check_collision(plane_x, plane_y)
+            if points > 0:
+                score_manager.add_collectible(points)
+                last_collect_frame = frame
 
             # Check if plane hits ground
             if plane_y >= ground_top_y - 1:
@@ -162,6 +244,9 @@ def main(stdscr):
                 except:
                     pass
 
+        # Draw collectibles
+        collectible_manager.draw(stdscr)
+
         # Draw plane
         plane_x = width // 3
         plane_y = int(plane.altitude)
@@ -179,9 +264,18 @@ def main(stdscr):
             stdscr.addstr(2, 2, f"Velocity: {plane.velocity:5.1f}")
             stdscr.addstr(3, 2, f"Distance: {score_manager.distance:4d}")
             stdscr.addstr(4, 2, f"Time:     {score_manager.time_survived:5.1f}s")
-            stdscr.addstr(5, 2, f"Score:    {score_manager.get_score():5d}")
-            stdscr.addstr(6, 2, f"High:     {score_manager.high_score:5d}")
+            stdscr.addstr(5, 2, f"Stars:    {score_manager.collectibles:3d}")
+            stdscr.addstr(6, 2, f"Score:    {score_manager.get_score():5d}")
+            stdscr.addstr(7, 2, f"High:     {score_manager.high_score:5d}")
             stdscr.addstr(height - 2, 2, "W=Up S=Down Q=Quit")
+
+            # Collection feedback
+            if frame - last_collect_frame < 10:
+                collect_msg = "+50!"
+                try:
+                    stdscr.addstr(plane_y - 2, plane_x + 4, collect_msg, curses.A_BOLD)
+                except:
+                    pass
 
             # Crash message
             if crashed:
