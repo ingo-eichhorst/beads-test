@@ -1,21 +1,19 @@
-# ASCII Flight Simulator
+# Simple ASCII Flight Simulator
 
-A terminal-based 3D flight simulator with semi-realistic physics and procedural terrain, rendered entirely in ASCII art.
-
-![Flight Simulator](ascii-flight-sim.png)
+A minimalist terminal-based side-scrolling flight simulator with simple physics and procedural terrain, rendered in ASCII art.
 
 ## Features
 
-- **Semi-realistic flight physics**: Lift, drag, thrust, and stall behavior
-- **3D procedural terrain**: Generated using Perlin noise
-- **ASCII raycasting renderer**: Real-time 3D terrain visualization
-- **Full flight instruments**: HUD displaying altitude, airspeed, heading, and more
-- **Stall warnings**: Realistic stall behavior at high angles of attack
+- **Simple flight physics**: Gravity, pitch control, air resistance
+- **Side-scrolling view**: 2D gameplay with procedural terrain
+- **Crash detection**: Game ends when plane hits the ground
+- **Real-time HUD**: Displays altitude, velocity, and controls
+- **Minimalist ASCII graphics**: Clean terminal rendering using curses
 
 ## Requirements
 
 - Python 3.6+
-- Terminal with support for cursor control (most modern terminals)
+- Terminal with curses support (most Unix/Linux/macOS terminals)
 - Minimum terminal size: 80x24 characters
 
 ## Installation
@@ -23,94 +21,105 @@ A terminal-based 3D flight simulator with semi-realistic physics and procedural 
 No installation required! The simulator uses only Python standard library.
 
 ```bash
-cd ascii_flight_sim
-./main.py
+python3 flight_sim.py
 ```
 
-Or:
+Or use the provided shell script:
 
 ```bash
-python3 ascii_flight_sim/main.py
+./run_simulator.sh
 ```
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| W / S | Pitch up / down |
-| A / D | Roll left / right |
-| + / - | Increase / decrease throttle |
-| R | Reset aircraft |
-| P | Pause simulation |
+| W | Pitch up (pull up) |
+| S | Pitch down (push down) |
 | Q | Quit |
 
-## Flight Tips
+## How to Play
 
-1. **Takeoff**: Increase throttle to 75%+, wait for speed to build, then gently pull back (W)
-2. **Avoid stalls**: Keep angle of attack below 12 degrees (watch the AoA indicator)
-3. **Turning**: Use roll (A/D) to bank, aircraft will turn naturally
-4. **Landing**: Reduce throttle, maintain ~50 knots, gentle descent
+1. **Start the game**: Run the simulator and you'll see your plane (>-o) flying over terrain
+2. **Control altitude**: Use W to climb and S to descend
+3. **Avoid crashing**: Don't let your plane hit the ground (#)
+4. **Monitor your HUD**: Watch your altitude and velocity in the top-left corner
+
+### Flight Tips
+
+- The plane is affected by gravity - you'll naturally descend if you don't pull up
+- Use gentle inputs - the physics includes momentum and air resistance
+- Watch the terrain ahead and adjust altitude early
+- If you crash (plane shows as X*X), press Q to quit
 
 ## How It Works
 
 ### Physics Model
 
-The simulator uses simplified aerodynamic equations:
+The simulator uses simplified physics:
 
-- **Lift**: `L = 0.5 × ρ × V² × S × CL(α)`
-- **Drag**: `D = 0.5 × ρ × V² × S × CD(α)`
-- **Stall**: Occurs at ~15° angle of attack
+- **Gravity**: Constant downward force (0.3 units)
+- **Pitch control**: Player input applies upward/downward force (1.0 units)
+- **Air resistance**: Velocity dampened by 10% each frame
+- **Vertical velocity**: Integrates pitch force minus gravity
 
-Where:
-- ρ = air density
-- V = airspeed
-- S = wing area
-- CL, CD = lift/drag coefficients (functions of angle of attack α)
+### Collision Detection
+
+The game checks if the plane's altitude intersects with the ground height at its horizontal position. When a collision is detected:
+- Game freezes (no more updates to plane or terrain)
+- Plane graphic changes to "X*X"
+- Bold blinking crash message appears
 
 ### Rendering
 
-Uses column-based raycasting to render 3D terrain:
-1. Cast ray for each screen column
-2. March along ray, sampling terrain height
-3. Map distance to ASCII character for depth shading
-4. Characters: ` .:-=+*#%@` (light to dark)
+- **Ground**: Drawn with '#' characters at varying heights
+- **Plane**: Shown as '>-o' when flying, 'X*X' when crashed
+- **Terrain scrolling**: Ground moves right-to-left to simulate forward motion
+- **Procedural generation**: New terrain columns added as old ones scroll off screen
 
-### Terrain
+### Terrain Generation
 
-Generated using multi-octave Perlin noise for realistic, infinite procedural terrain.
+Random terrain heights (3-8 units) are generated for each column, creating varied landscapes to navigate.
 
 ## Project Structure
 
 ```
-ascii_flight_sim/
-├── main.py                 # Entry point
-├── config.py               # Constants and configuration
-├── engine/                 # Game engine
-│   ├── display.py          # Curses wrapper
-│   ├── game_loop.py        # Main loop
-│   └── input_handler.py    # Controls
-├── physics/                # Flight physics
-│   ├── aircraft.py         # Aircraft state
-│   ├── aerodynamics.py     # Force calculations
-│   ├── physics_engine.py   # Physics integration
-│   └── vector3d.py         # 3D math
-├── rendering/              # Graphics
-│   ├── camera.py           # Camera system
-│   ├── raycaster.py        # 3D renderer
-│   ├── ascii_shader.py     # Character mapping
-│   └── hud.py              # Instruments
-└── world/                  # World generation
-    ├── perlin.py           # Noise generator
-    └── terrain.py          # Terrain queries
+.
+├── flight_sim.py        # Main simulator code
+├── run_simulator.sh     # Helper script to run the simulator
+├── README.md           # This file
+└── .beads/             # Issue tracking
 ```
+
+## Code Structure
+
+The simulator consists of three main classes:
+
+- `SimplePlane`: Manages plane state (altitude, velocity) and physics updates
+- `SimpleGround`: Handles terrain generation and scrolling
+- `main()`: Game loop with input, update, collision detection, and rendering
 
 ## Troubleshooting
 
 **Terminal too small**: Resize your terminal to at least 80x24 characters.
 
-**Colors not working**: Some terminals may not support colors. The simulator will still work in monochrome.
+**Curses errors**: Make sure you're running on a Unix-like system (Linux, macOS) with curses support.
 
-**Slow performance**: Try reducing the terminal size or closing other applications.
+**Game too easy/hard**: Edit `flight_sim.py` and adjust:
+- `gravity = 0.3` - Higher = harder to stay airborne
+- `pitch_force = 1.0` - Higher = more responsive controls
+- `random.randint(3, 8)` - Terrain height range
+
+## Development
+
+This project uses [beads](https://github.com/beadtime/beads) for issue tracking.
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+```
 
 ## License
 
@@ -118,4 +127,4 @@ MIT License - feel free to modify and share!
 
 ## Credits
 
-Built with Python and curses. Inspired by classic ASCII art games and flight simulators.
+Built with Python and curses. A simple demonstration of ASCII game development and basic flight physics.
