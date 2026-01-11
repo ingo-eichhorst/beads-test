@@ -69,6 +69,7 @@ def main(stdscr):
 
     pitch = 0
     frame = 0
+    crashed = False
 
     while True:
         # Input
@@ -83,9 +84,21 @@ def main(stdscr):
             pitch = -1
 
         # Update
-        plane.update(pitch)
-        if frame % 2 == 0:  # Scroll slower
-            ground.scroll()
+        if not crashed:
+            plane.update(pitch)
+            if frame % 2 == 0:  # Scroll slower
+                ground.scroll()
+
+        # Collision detection
+        if not crashed:
+            plane_x = width // 3
+            plane_y = int(plane.altitude)
+            ground_height = ground.get_height(plane_x)
+            ground_top_y = height - ground_height
+
+            # Check if plane hits ground
+            if plane_y >= ground_top_y - 1:
+                crashed = True
 
         # Draw
         stdscr.clear()
@@ -103,7 +116,10 @@ def main(stdscr):
         plane_x = width // 3
         plane_y = int(plane.altitude)
         try:
-            stdscr.addstr(plane_y, plane_x, '>-o')
+            if crashed:
+                stdscr.addstr(plane_y, plane_x, 'X*X')
+            else:
+                stdscr.addstr(plane_y, plane_x, '>-o')
         except:
             pass
 
@@ -112,6 +128,13 @@ def main(stdscr):
             stdscr.addstr(1, 2, f"Altitude: {int(height - plane.altitude):3d}")
             stdscr.addstr(2, 2, f"Velocity: {plane.velocity:5.1f}")
             stdscr.addstr(height - 2, 2, "W=Up S=Down Q=Quit")
+
+            # Crash message
+            if crashed:
+                crash_msg = "*** CRASHED! Press Q to quit ***"
+                crash_x = (width - len(crash_msg)) // 2
+                crash_y = height // 2
+                stdscr.addstr(crash_y, crash_x, crash_msg, curses.A_BOLD | curses.A_BLINK)
         except:
             pass
 
